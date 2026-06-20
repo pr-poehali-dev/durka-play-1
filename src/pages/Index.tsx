@@ -67,6 +67,10 @@ export default function Index() {
 
   const lastTickRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
+  const phaseRef = useRef<'wait' | 'press'>('wait');
+  const phaseTimeRef = useRef<number>(30);
+  const strikesRef = useRef<number>(0);
+  const endedRef = useRef<boolean>(false);
 
   const startGame = useCallback(
     (chosenMode: Mode) => {
@@ -76,6 +80,10 @@ export default function Index() {
       setStrikes(0);
       setPhase('wait');
       setPhaseTime(30);
+      strikesRef.current = 0;
+      phaseRef.current = 'wait';
+      phaseTimeRef.current = 30;
+      endedRef.current = false;
       lastTickRef.current = Date.now();
       setScreen('game');
     },
@@ -83,8 +91,16 @@ export default function Index() {
   );
 
   const win = useCallback(() => {
+    if (endedRef.current) return;
+    endedRef.current = true;
     setWinCode(genCode());
     setScreen('win');
+  }, []);
+
+  const lose = useCallback(() => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    setScreen('lose');
   }, []);
 
   // main countdown loop — detects device sleep/freeze via real-time gap
@@ -94,17 +110,18 @@ export default function Index() {
     let stopped = false;
 
     const loop = () => {
-      if (stopped) return;
+      if (stopped || endedRef.current) return;
       const now = Date.now();
       const delta = (now - lastTickRef.current) / 1000;
       lastTickRef.current = now;
 
-      // device froze/slept — gap too big => lose (easy mode rule)
-      if (mode === 'easy' && delta > 2) {
-        setScreen('lose');
+      // device froze/slept/locked — gap too big => lose (both modes)
+      if (delta > 2) {
+        lose();
         return;
       }
 
+      // main timer
       setRemaining((prev) => {
         const next = prev - delta;
         if (next <= 0) {
@@ -114,49 +131,60 @@ export default function Index() {
         return next;
       });
 
+      // hard mode phase logic via refs (no nested setState)
       if (mode === 'hard') {
-        setPhaseTime((pt) => {
-          const next = pt - delta;
-          if (next <= 0) {
-            setPhase((cur) => {
-              if (cur === 'wait') {
-                setPhaseTime(6);
-                return 'press';
-              } else {
-                // press window expired without pressing => lose
-                setScreen('lose');
-                return cur;
-              }
-            });
-            return cur === undefined ? 0 : 0;
+        let pt = phaseTimeRef.current - delta;
+        if (pt <= 0) {
+          if (phaseRef.current === 'wait') {
+            phaseRef.current = 'press';
+            pt = 6;
+            setPhase('press');
+          } else {
+            // press window expired without pressing => lose
+            lose();
+            return;
           }
-          return next;
-        });
+        }
+        phaseTimeRef.current = pt;
+        setPhaseTime(pt);
       }
 
       rafRef.current = requestAnimationFrame(loop);
     };
 
     rafRef.current = requestAnimationFrame(loop);
+
+    // device lock / app switch / tab hidden => lose
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') lose();
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    window.addEventListener('blur', onHidden);
+    window.addEventListener('pagehide', onHidden);
+
     return () => {
       stopped = true;
       cancelAnimationFrame(rafRef.current);
+      document.removeEventListener('visibilitychange', onHidden);
+      window.removeEventListener('blur', onHidden);
+      window.removeEventListener('pagehide', onHidden);
     };
-  }, [screen, mode, win]);
+  }, [screen, mode, win, lose]);
 
   const handlePressButton = () => {
-    if (mode !== 'hard') return;
-    if (phase === 'press') {
+    if (mode !== 'hard' || endedRef.current) return;
+    if (phaseRef.current === 'press') {
       // correct press
+      phaseRef.current = 'wait';
+      phaseTimeRef.current = 30;
       setPhase('wait');
       setPhaseTime(30);
     } else {
       // pressed during wait — strike
-      setStrikes((s) => {
-        const ns = s + 1;
-        if (ns >= 2) setScreen('lose');
-        return ns;
-      });
+      const ns = strikesRef.current + 1;
+      strikesRef.current = ns;
+      setStrikes(ns);
+      if (ns >= 2) lose();
     }
   };
 
