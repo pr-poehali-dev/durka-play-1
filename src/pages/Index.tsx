@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Icon from '@/components/ui/icon';
+import Parrot from '@/components/Parrot';
 
 type Screen = 'start' | 'timers' | 'mode' | 'game' | 'win' | 'lose'
             | 'inf_mode' | 'inf_game' | 'inf_save' | 'inf_finish';
@@ -96,6 +97,11 @@ const saveAchievements = (list: Achievement[]) => localStorage.setItem(STORAGE_K
 const loadInfSaves = (): InfSave[] => { try { return JSON.parse(localStorage.getItem(INF_SAVES_KEY) || '[]'); } catch { return []; } };
 const saveInfSaves = (list: InfSave[]) => localStorage.setItem(INF_SAVES_KEY, JSON.stringify(list));
 
+const SETTINGS_KEY = 'durka_settings';
+interface Settings { parrotEnabled: boolean; parrotInGame: boolean; }
+const loadSettings = (): Settings => { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { return { parrotEnabled: false, parrotInGame: false }; } };
+const saveSettings = (s: Settings) => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+
 const grid: React.CSSProperties = {
   backgroundColor: '#ffffff',
   backgroundImage: 'linear-gradient(#cfe8ff 1px, transparent 1px), linear-gradient(90deg, #cfe8ff 1px, transparent 1px)',
@@ -128,6 +134,14 @@ export default function Index() {
   const [infCodeScreen, setInfCodeScreen] = useState(false); // show code input on inf_mode
   const [infResumeCountdown, setInfResumeCountdown] = useState(0); // 5-4-3-2-1
   const [infResuming, setInfResuming] = useState(false);
+
+  // ── settings ──
+  const [settings, setSettings] = useState<Settings>(() => ({ parrotEnabled: false, parrotInGame: false, ...loadSettings() }));
+  const [showSettings, setShowSettings] = useState(false);
+
+  const updateSettings = (patch: Partial<Settings>) => {
+    setSettings(prev => { const next = { ...prev, ...patch }; saveSettings(next); return next; });
+  };
 
   // ── achievements ──
   const [showAchievements, setShowAchievements] = useState(false);
@@ -410,6 +424,75 @@ export default function Index() {
     );
   }
 
+  function SettingsButton() {
+    return (
+      <button
+        onClick={() => setShowSettings(true)}
+        className="absolute top-4 right-4 w-10 h-10 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center shadow hover:bg-slate-50 active:scale-95 transition z-10"
+      >
+        <Icon name="Settings" size={18} className="text-slate-500" />
+      </button>
+    );
+  }
+
+  function SettingsModal() {
+    if (!showSettings) return null;
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 font-oswald">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+              <Icon name="Settings" size={20} className="text-slate-500" /> Настройки
+            </h3>
+            <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600">
+              <Icon name="X" size={24} />
+            </button>
+          </div>
+
+          {/* Parrot toggle */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between py-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🦜</span>
+                <span className="text-slate-700 font-semibold">
+                  {settings.parrotEnabled ? 'Попугай включён' : 'Попугай отключён'}
+                </span>
+              </div>
+              <button
+                onClick={() => updateSettings({ parrotEnabled: !settings.parrotEnabled, parrotInGame: !settings.parrotEnabled ? settings.parrotInGame : false })}
+                className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${settings.parrotEnabled ? 'bg-sky-500' : 'bg-slate-200'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${settings.parrotEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            {settings.parrotEnabled && (
+              <div className="flex items-center justify-between py-3 border-b border-slate-100 pl-8">
+                <div className="flex items-center gap-2">
+                  <Icon name="Gamepad2" size={16} className="text-slate-400" />
+                  <span className="text-slate-600 font-semibold text-sm">ВО ВРЕМЯ ИГРЫ</span>
+                </div>
+                <button
+                  onClick={() => updateSettings({ parrotInGame: !settings.parrotInGame })}
+                  className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${settings.parrotInGame ? 'bg-sky-500' : 'bg-slate-200'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${settings.parrotInGame ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowSettings(false)}
+            className="mt-6 w-full py-3 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl transition"
+          >
+            Готово
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ════════════════════════════════════════
   // SCREENS
   // ════════════════════════════════════════
@@ -418,6 +501,8 @@ export default function Index() {
   if (screen === 'start') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center font-oswald relative">
       <MedalButton />
+      <SettingsButton />
+      <Parrot enabled={settings.parrotEnabled} />
       <h1 className="text-6xl md:text-8xl font-bold tracking-wider text-sky-600 drop-shadow-sm">
         ДУРКА<span className="text-slate-800"> PLAY</span>
       </h1>
@@ -436,6 +521,7 @@ export default function Index() {
         </button>
       </div>
       <AchievementsModal />
+      <SettingsModal />
     </div>
   );
 
@@ -443,6 +529,8 @@ export default function Index() {
   if (screen === 'timers') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
       <MedalButton />
+      <SettingsButton />
+      <Parrot enabled={settings.parrotEnabled} />
       <h2 className="text-3xl md:text-4xl font-bold text-slate-800 mb-8 tracking-wide">ВЫБЕРИ ВРЕМЯ</h2>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 max-w-3xl">
         {TIMERS.map(t => (
@@ -456,6 +544,7 @@ export default function Index() {
         <Icon name="ArrowLeft" size={18} /> назад
       </button>
       <AchievementsModal />
+      <SettingsModal />
     </div>
   );
 
@@ -463,6 +552,8 @@ export default function Index() {
   if (screen === 'mode') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
       <MedalButton />
+      <SettingsButton />
+      <Parrot enabled={settings.parrotEnabled} />
       <h2 className="text-7xl md:text-9xl font-bold text-slate-800 mb-12">???</h2>
       <div className="flex flex-col sm:flex-row gap-6">
         <button onClick={() => startGame('easy')}
@@ -478,12 +569,14 @@ export default function Index() {
         <Icon name="ArrowLeft" size={18} /> назад
       </button>
       <AchievementsModal />
+      <SettingsModal />
     </div>
   );
 
   // REGULAR GAME
   if (screen === 'game') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
+      <Parrot enabled={settings.parrotEnabled && settings.parrotInGame} />
       {mode === 'hard' && strikes > 0 && (
         <div className="absolute top-6 right-6">
           <span className="text-5xl font-bold text-red-500">{strikes}</span>
@@ -508,6 +601,8 @@ export default function Index() {
   if (screen === 'win') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
       <MedalButton />
+      <SettingsButton />
+      <Parrot enabled={settings.parrotEnabled} />
       <Icon name="Trophy" size={80} className="text-amber-400 mb-4" />
       <h2 className="text-5xl md:text-7xl font-bold text-sky-600 mb-6">ВЫ ПОБЕДИЛИ</h2>
       <p className="text-slate-500 mb-2">Ваш секретный код:</p>
@@ -523,6 +618,7 @@ export default function Index() {
         НА ГЛАВНУЮ
       </button>
       <AchievementsModal />
+      <SettingsModal />
     </div>
   );
 
@@ -530,6 +626,8 @@ export default function Index() {
   if (screen === 'lose') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
       <MedalButton />
+      <SettingsButton />
+      <Parrot enabled={settings.parrotEnabled} />
       <Icon name="Skull" size={80} className="text-red-500 mb-4" />
       <h2 className="text-5xl md:text-7xl font-bold text-red-500 mb-12">ВЫ ПРОИГРАЛИ</h2>
       <div className="flex flex-col sm:flex-row gap-6">
@@ -543,6 +641,7 @@ export default function Index() {
         </button>
       </div>
       <AchievementsModal />
+      <SettingsModal />
     </div>
   );
 
@@ -552,6 +651,8 @@ export default function Index() {
   if (screen === 'inf_mode') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
       <MedalButton />
+      <SettingsButton />
+      <Parrot enabled={settings.parrotEnabled} />
       <Icon name="Infinity" size={64} className="text-violet-500 mb-4" />
       <h2 className="text-4xl md:text-5xl font-bold text-slate-800 mb-2">БЕСКОНЕЧНЫЙ</h2>
       <p className="text-slate-500 mb-10">Режим без ограничения времени</p>
@@ -605,12 +706,14 @@ export default function Index() {
         <Icon name="ArrowLeft" size={18} /> назад
       </button>
       <AchievementsModal />
+      <SettingsModal />
     </div>
   );
 
   // INF_GAME
   if (screen === 'inf_game') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
+      <Parrot enabled={settings.parrotEnabled && settings.parrotInGame} />
       {infMode === 'hard' && infStrikes > 0 && (
         <div className="absolute top-6 right-6">
           <span className="text-5xl font-bold text-red-500">{infStrikes}</span>
@@ -655,6 +758,8 @@ export default function Index() {
   if (screen === 'inf_save') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
       <MedalButton />
+      <SettingsButton />
+      <Parrot enabled={settings.parrotEnabled} />
       <Icon name="Save" size={70} className="text-amber-400 mb-4" />
       <h2 className="text-4xl md:text-5xl font-bold text-slate-800 mb-2">СОХРАНЕНО!</h2>
       <p className="text-slate-500 mb-6 text-center">Используй этот код чтобы продолжить игру.<br/>Код одноразовый — сохрани его!</p>
@@ -664,6 +769,7 @@ export default function Index() {
         НА ГЛАВНУЮ
       </button>
       <AchievementsModal />
+      <SettingsModal />
     </div>
   );
 
@@ -671,6 +777,8 @@ export default function Index() {
   if (screen === 'inf_finish') return (
     <div style={grid} className="min-h-screen flex flex-col items-center justify-center p-6 font-oswald relative">
       <MedalButton />
+      <SettingsButton />
+      <Parrot enabled={settings.parrotEnabled} />
       <Icon name="Trophy" size={80} className="text-amber-400 mb-4" />
       <h2 className="text-4xl md:text-5xl font-bold text-sky-600 mb-2">ЗАВЕРШЕНО!</h2>
       <p className="text-slate-500 mb-1">Ты продержался:</p>
@@ -688,6 +796,7 @@ export default function Index() {
         НА ГЛАВНУЮ
       </button>
       <AchievementsModal />
+      <SettingsModal />
     </div>
   );
 
